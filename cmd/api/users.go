@@ -3,10 +3,18 @@ package main
 import (
 	"errors"
 	"net/http"
+	"time"
 
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/labstack/echo/v4"
 	"github.com/sulavmhrzn/chitrapost/internal/data"
 )
+
+type JWTCutsomClaims struct {
+	ID    int    `json:"id"`
+	Email string `json:"email"`
+	jwt.RegisteredClaims
+}
 
 func (app *application) RegisterUserHandler(c echo.Context) error {
 	var input struct {
@@ -61,7 +69,7 @@ func (app *application) LoginUserHandler(c echo.Context) error {
 	if err := c.Bind(&input); err != nil {
 		code := err.(*echo.HTTPError).Code
 		message := err.(*echo.HTTPError).Message
-		return echo.NewHTTPError(code, map[string]any{
+		return echo.NewHTTPError(code, echo.Map{
 			"error": message,
 		})
 	}
@@ -72,7 +80,7 @@ func (app *application) LoginUserHandler(c echo.Context) error {
 	}
 
 	if err := data.ValidateUser(u); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, map[string]any{
+		return echo.NewHTTPError(http.StatusBadRequest, echo.Map{
 			"error": err.Error(),
 		})
 	}
@@ -81,11 +89,11 @@ func (app *application) LoginUserHandler(c echo.Context) error {
 	if err != nil {
 		switch {
 		case errors.Is(err, data.ErrNoRows):
-			return echo.NewHTTPError(http.StatusUnauthorized, map[string]any{
+			return echo.NewHTTPError(http.StatusUnauthorized, echo.Map{
 				"error": "invalid credentials",
 			})
 		default:
-			return echo.NewHTTPError(http.StatusInternalServerError, map[string]any{
+			return echo.NewHTTPError(http.StatusInternalServerError, echo.Map{
 				"error": "internal server error",
 			})
 		}
@@ -93,15 +101,33 @@ func (app *application) LoginUserHandler(c echo.Context) error {
 
 	ok, err := data.ComparePasswordAndHash(input.Password, user.Password)
 	if err != nil {
-		return echo.NewHTTPError(http.StatusInternalServerError, map[string]any{
+		return echo.NewHTTPError(http.StatusInternalServerError, echo.Map{
 			"error": "internal server error",
 		})
 	}
 	if !ok {
-		return echo.NewHTTPError(http.StatusUnauthorized, map[string]any{
+		return echo.NewHTTPError(http.StatusUnauthorized, echo.Map{
 			"error": "invalid credentials",
 		})
 	}
-	return c.JSON(http.StatusOK, user)
+	claims := &JWTCutsomClaims{
+		user.ID,
+		user.Email,
+		jwt.RegisteredClaims{
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Hour * 24)),
+		},
+	}
+
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	t, err := token.SignedString([]byte(app.cfg.JWT_SECRET))
+	if err != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, echo.Map{
+			"error": "internal server error",
+		})
+	}
+
+	return c.JSON(http.StatusOK, echo.Map{
+		"token": t,
+	})
 
 }

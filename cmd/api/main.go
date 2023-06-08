@@ -6,15 +6,18 @@ import (
 	"os"
 	"time"
 
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/jackc/pgx/v5"
 	"github.com/joho/godotenv"
+	echojwt "github.com/labstack/echo-jwt/v4"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 	"github.com/sulavmhrzn/chitrapost/internal/data"
 )
 
 type config struct {
-	dsn string
+	dsn        string
+	JWT_SECRET string
 }
 type application struct {
 	models data.Models
@@ -26,7 +29,8 @@ func main() {
 		log.Fatal(err)
 	}
 	cfg := config{
-		dsn: os.Getenv("DSN"),
+		dsn:        os.Getenv("DSN"),
+		JWT_SECRET: os.Getenv("JWT_SECRET"),
 	}
 	conn, err := OpenDB(cfg)
 	if err != nil {
@@ -39,11 +43,17 @@ func main() {
 	}
 
 	e := echo.New()
-
+	jwtconfig := echojwt.Config{
+		NewClaimsFunc: func(c echo.Context) jwt.Claims {
+			return new(JWTCutsomClaims)
+		},
+		SigningKey: []byte(app.cfg.JWT_SECRET),
+	}
 	e.Use(middleware.Logger())
+	e.Use(middleware.Secure())
 
 	api := e.Group("/api")
-	api.GET("/healthcheck", HealtCheckHandler)
+	api.GET("/healthcheck", HealtCheckHandler, echojwt.WithConfig(jwtconfig))
 
 	usersGroup := api.Group("/users")
 	usersGroup.POST("/register", app.RegisterUserHandler)
