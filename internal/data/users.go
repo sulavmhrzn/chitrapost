@@ -21,12 +21,25 @@ type UserModel struct {
 	db *pgx.Conn
 }
 
+var (
+	ErrDuplicateEmail = errors.New("email already exists")
+	ErrNoRows         = errors.New("no rows exists")
+)
+
 func CreateHashPassword(plain string) (string, error) {
 	hash, err := argon2id.CreateHash(plain, argon2id.DefaultParams)
 	if err != nil {
 		return "", err
 	}
 	return hash, nil
+}
+
+func ComparePasswordAndHash(plain, hashed string) (bool, error) {
+	match, err := argon2id.ComparePasswordAndHash(plain, hashed)
+	if err != nil {
+		return false, err
+	}
+	return match, nil
 }
 
 func ValidateUser(u *User) error {
@@ -48,9 +61,26 @@ func (m UserModel) Insert(u *User) (*User, error) {
 	if err != nil {
 		code := err.(*pgconn.PgError).Code
 		if code == "23505" {
-			return nil, errors.New("email already exists")
+			return nil, ErrDuplicateEmail
 		}
 		return nil, err
 	}
 	return u, nil
+}
+
+func (m UserModel) GetUser(user *User) (*User, error) {
+	query := `SELECT id, email, password FROM users WHERE email = $1`
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	err := m.db.QueryRow(ctx, query, user.Email).Scan(&user.ID, &user.Email, &user.Password)
+	if err != nil {
+		switch {
+		case errors.Is(err, pgx.ErrNoRows):
+			return nil, ErrNoRows
+		default:
+			return nil, err
+		}
+	}
+	return user, nil
 }

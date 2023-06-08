@@ -47,6 +47,7 @@ func main() {
 
 	usersGroup := api.Group("/users")
 	usersGroup.POST("/register", app.RegisterUserHandler)
+	usersGroup.POST("/login", app.LoginUserHandler)
 
 	e.Logger.Fatal(e.Start(":3000"))
 }
