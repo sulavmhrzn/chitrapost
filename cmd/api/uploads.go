@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"io"
 	"log"
 	"net/http"
 
@@ -41,6 +42,25 @@ func (app *application) UploadFileHandler(c echo.Context) error {
 		return err
 	}
 	defer src.Close()
+
+	buff := make([]byte, 512)
+	_, err = src.Read(buff)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, echo.Map{
+			"error": "internal server error",
+		})
+	}
+	filetype := http.DetectContentType(buff)
+	if filetype != "image/jpeg" && filetype != "image/png" {
+		return echo.NewHTTPError(http.StatusBadRequest, echo.Map{
+			"error": "file should be either jpeg or png",
+		})
+	}
+	if _, err := src.Seek(0, io.SeekStart); err != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, echo.Map{
+			"error": "internal server error",
+		})
+	}
 
 	go func() {
 		resp, err := app.cloudinary.Upload.Upload(context.Background(), src, uploader.UploadParams{Folder: "chitrapost"})
