@@ -17,9 +17,10 @@ import (
 )
 
 type config struct {
-	dsn            string
-	JWT_SECRET     string
-	cloudinary_url string
+	dsn             string
+	JWT_SECRET      string
+	cloudinary_url  string
+	MAX_UPLOAD_SIZE string
 }
 type application struct {
 	models     data.Models
@@ -32,9 +33,10 @@ func main() {
 		log.Fatal(err)
 	}
 	cfg := config{
-		dsn:            os.Getenv("DSN"),
-		JWT_SECRET:     os.Getenv("JWT_SECRET"),
-		cloudinary_url: os.Getenv("CLOUDINARY_URL"),
+		dsn:             os.Getenv("DSN"),
+		JWT_SECRET:      os.Getenv("JWT_SECRET"),
+		cloudinary_url:  os.Getenv("CLOUDINARY_URL"),
+		MAX_UPLOAD_SIZE: "10M",
 	}
 	conn, err := OpenDB(cfg)
 	if err != nil {
@@ -64,12 +66,12 @@ func main() {
 	api := e.Group("/api")
 	api.GET("/healthcheck", HealtCheckHandler, echojwt.WithConfig(jwtconfig))
 
-	usersGroup := api.Group("/users")
+	usersGroup := api.Group("/users", middleware.BodyLimit("2M"))
 	usersGroup.POST("/register", app.RegisterUserHandler)
 	usersGroup.POST("/login", app.LoginUserHandler)
 
 	uploadsGroup := api.Group("/uploads")
-	uploadsGroup.POST("/", app.UploadFileHandler, echojwt.WithConfig(jwtconfig))
+	uploadsGroup.POST("/", app.UploadFileHandler, echojwt.WithConfig(jwtconfig), middleware.BodyLimit(app.cfg.MAX_UPLOAD_SIZE))
 
 	e.Logger.Fatal(e.Start(":3000"))
 }
