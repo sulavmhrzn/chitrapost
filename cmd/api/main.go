@@ -6,6 +6,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/cloudinary/cloudinary-go/v2"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/jackc/pgx/v5"
 	"github.com/joho/godotenv"
@@ -16,12 +17,14 @@ import (
 )
 
 type config struct {
-	dsn        string
-	JWT_SECRET string
+	dsn            string
+	JWT_SECRET     string
+	cloudinary_url string
 }
 type application struct {
-	models data.Models
-	cfg    config
+	models     data.Models
+	cfg        config
+	cloudinary *cloudinary.Cloudinary
 }
 
 func main() {
@@ -29,17 +32,23 @@ func main() {
 		log.Fatal(err)
 	}
 	cfg := config{
-		dsn:        os.Getenv("DSN"),
-		JWT_SECRET: os.Getenv("JWT_SECRET"),
+		dsn:            os.Getenv("DSN"),
+		JWT_SECRET:     os.Getenv("JWT_SECRET"),
+		cloudinary_url: os.Getenv("CLOUDINARY_URL"),
 	}
 	conn, err := OpenDB(cfg)
 	if err != nil {
 		log.Fatal(err)
 	}
 	defer conn.Close(context.Background())
+	cld, err := setUpCloudinary(cfg)
+	if err != nil {
+		log.Fatal(err)
+	}
 	app := application{
-		cfg:    cfg,
-		models: *data.NewModels(conn),
+		cfg:        cfg,
+		models:     *data.NewModels(conn),
+		cloudinary: cld,
 	}
 
 	e := echo.New()
@@ -58,6 +67,9 @@ func main() {
 	usersGroup := api.Group("/users")
 	usersGroup.POST("/register", app.RegisterUserHandler)
 	usersGroup.POST("/login", app.LoginUserHandler)
+
+	uploadsGroup := api.Group("/uploads")
+	uploadsGroup.POST("/", app.UploadFileHandler, echojwt.WithConfig(jwtconfig))
 
 	e.Logger.Fatal(e.Start(":3000"))
 }
@@ -82,4 +94,12 @@ func loadENV() error {
 		return err
 	}
 	return nil
+}
+
+func setUpCloudinary(cfg config) (*cloudinary.Cloudinary, error) {
+	cld, err := cloudinary.NewFromURL(cfg.cloudinary_url)
+	if err != nil {
+		return nil, err
+	}
+	return cld, nil
 }

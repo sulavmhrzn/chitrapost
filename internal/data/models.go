@@ -3,11 +3,13 @@ package data
 import "github.com/jackc/pgx/v5"
 
 type Models struct {
-	UserModel UserModel
+	UserModel   UserModel
+	ChitraModel ChitraModel
 }
 
 func NewModels(db *pgx.Conn) *Models {
 	return &Models{
-		UserModel: UserModel{db},
+		UserModel:   UserModel{db},
+		ChitraModel: ChitraModel{db},
 	}
 }

@@ -84,3 +84,23 @@ func (m UserModel) GetUser(user *User) (*User, error) {
 	}
 	return user, nil
 }
+
+func (m UserModel) GetUserFromID(id int) (*User, error) {
+	query := `SELECT id, email FROM users WHERE id = $1`
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	user := &User{}
+	err := m.db.QueryRow(ctx, query, id).Scan(&user.ID, &user.Email)
+
+	if err != nil {
+		switch {
+		case errors.Is(err, pgx.ErrNoRows):
+			return nil, ErrNoRows
+		default:
+			return nil, err
+		}
+	}
+
+	return user, nil
+}
